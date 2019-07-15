@@ -1,10 +1,12 @@
 import tensorflow as tf
+import numpy as np
 
-import modeling as bert_modeling
-import tokenization
-from base_model import BaseModel
-from bert_input import InputExample, InputFeatures
-from utils import process_bert_embeddings
+#from . import modeling
+from .modeling import BertConfig, BertModel
+from . import tokenization
+from .base_model import BaseModel
+from .bert_input import InputExample, InputFeatures
+from .utils import process_bert_embeddings
 
 import logging
 logging.basicConfig(level = logging.INFO,format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -29,8 +31,16 @@ def construct_vocab(path):
     return vocab
 
 class textCNN(BaseModel):
-    def __init__(self, max_len,  batch_size, n_epochs, n_classes = None):
+    def __init__(self, bert_config_file, init_checkpoint, vocab_file, do_lower_case, max_len, batch_size, n_epochs, n_classes = None):
         super(textCNN, self).__init__(Config())
+        self.bert_config = BertConfig.from_json_file(
+            bert_config_file)
+        self.bert_model = BertModel(self.bert_config, False)
+        self.bert_model.restore(init_checkpoint)
+        self.vocab = construct_vocab(vocab_file)
+        self.tokenizer = tokenization.FullTokenizer(
+            vocab_file=vocab_file, do_lower_case=do_lower_case)
+
         self.config.max_length = max_len
         self.config.n_epochs = n_epochs
         if n_classes != None:
@@ -45,9 +55,7 @@ class textCNN(BaseModel):
 
             examples.append(
                 InputExample(text_a=text_a))
-        # print(lines)
 
-        # sys.exit(examples)
         return examples
 
     def convert_examples_to_features(self, examples, tokenizer):
@@ -63,7 +71,6 @@ class textCNN(BaseModel):
 
     def convert_single_example(self, example, tokenizer):
         """Converts a single `InputExample` into a single `InputFeatures`."""
-        # tokens_a = tokenizer.tokenize(example.text_a)  ###
         tokens_a = [x if x in self.vocab else '[UNK]' for x in list(example.text_a)]
 
         # Account for [CLS] and [SEP] with "- 2"
@@ -76,7 +83,6 @@ class textCNN(BaseModel):
 
         tokens.append("[SEP]")
         input_ids = tokenizer.convert_tokens_to_ids(tokens)
-        # print (input_ids)
         # The mask has 1 for real tokens and 0 for padding tokens. Only real
         # tokens are attended to.
         input_mask = [1] * len(input_ids)
@@ -95,19 +101,31 @@ class textCNN(BaseModel):
         )
         return feature
 
+    def encode_bert(self, sample):
+        samples = self._create_examples(sample)
+
+        features = self.convert_examples_to_features(samples, self.tokenizer)
+
+        return self.bert_model.get_sequence_output(features)
+
     def add_placeholders(self):
         self.input_placeholder = tf.placeholder(tf.float32, shape=[None, None, 768], name = 'embedding')
         self.label_placeholder = tf.placeholder(tf.float32, [None, self.config.n_classes])
-        self.dropout_placeholder = tf.placeholder(tf.float64)
+        self.dropout_placeholder = tf.placeholder(tf.float32)
 
     def create_feed_dict(self, inputs_batch, labels_batch=None,  dropout_prob=1.):
         sequence_lengths = [len(x) for x in inputs_batch]
         bert_embeddings = self.encode_bert(inputs_batch)
 
-        embeddings_padded = process_bert_embeddings(bert_embeddings, sequence_lengths, self.config.max_length)
+        # embeddings_padded = process_bert_embeddings(bert_embeddings, sequence_lengths, self.config.max_length)
+        # logging.info('xx:embed type is {}'.format(type(bert_embeddings)))
+        # logging.info('xx:embed size is {}'.format(np.array(bert_embeddings).shape))
+        # logging.info('xx:embed type is {}'.format(type(embeddings_padded)))
+        # logging.info('xx:embed size is {}'.format(np.array(embeddings_padded).shape))
 
         feed_dict = {
-            self.input_placeholder : embeddings_padded,
+            #self.input_placeholder : embeddings_padded,
+            self.input_placeholder : bert_embeddings,
             self.dropout_placeholder : dropout_prob
         }
         if labels_batch is not None:
@@ -155,7 +173,7 @@ class textCNN(BaseModel):
 
     def add_loss_op(self):
         with tf.variable_scope('loss'):
-            loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits = self.logits, labels = self.label_placeholder), name= 'loss')
+            loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = self.logits, labels = self.label_placeholder), name= 'loss')
             tf.summary.scalar("loss", loss)
             return loss
 

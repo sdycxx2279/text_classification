@@ -25,6 +25,20 @@ tf.app.flags.DEFINE_integer('n_classes', 10, 'type of labels')
 tf.app.flags.DEFINE_integer('checkout_batch_num', 30, 'num of train batch which we evaluate model')
 tf.app.flags.DEFINE_float('dropout_prob', 30, 'the parameter of dropout')
 
+flags.DEFINE_string(
+    "bert_config_file", "model/models/chinese_L-12_H-768_A-12/bert_config.json",
+    "The config json file corresponding to the pre-trained BERT model. "
+    "This specifies the model architecture.")
+flags.DEFINE_string(
+    "init_checkpoint", "model/models/chinese_L-12_H-768_A-12/bert_model.ckpt",
+    "Initial checkpoint (usually from a pre-trained BERT model).")
+flags.DEFINE_bool(
+    "do_lower_case", True,
+    "Whether to lower case the input paragraph. Should be True for uncased "
+    "models and False for cased models.")
+flags.DEFINE_string("vocab_file", "model/models/chinese_L-12_H-768_A-12/vocab.txt",
+                    "The vocabulary file that the BERT model was trained on.")
+
 FLAGS = tf.app.flags.FLAGS
 
 def main(_):
@@ -37,6 +51,10 @@ def main(_):
         if FLAGS.model == 'cnn':
             logging.info('Initializing CNN...') 
             model = textCNN(
+                bert_config_file = FLAGS.bert_config_file,
+                init_checkpoint = FLAGS.init_checkpoint,
+                vocab_file = FLAGS.vocab_file,
+                do_lower_case = FLAGS.do_lower_case,
                 max_len = FLAGS.max_len,
                 batch_size = FLAGS.batch_size,
                 n_epochs = FLAGS.epochs,

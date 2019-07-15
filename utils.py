@@ -1,7 +1,7 @@
 #-*- coding:utf8 -*-
-from keras.utils import to_categorical
 import numpy as np
 import logging
+from keras.utils import to_categorical
 
 logging.basicConfig(level = logging.INFO,format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
@@ -32,13 +32,3 @@ def get_data_batch(path, batch_size):
 		batch_y = y_data[start_id:end_id]
 		yield i, batch_x, batch_y
 
-def process_bert_embeddings(embeddings, sequence_lengths, max_length):
-	embeddings_p = []
-	for i in range(len(embeddings)):
-		sequence_length = sequence_lengths[i]
-		# Remove special tokens, i.e. [CLS], [SEP]
-		embedding = np.delete(embeddings[i], [0, sequence_length + 1], 0)
-		# Remove extra padding tokens
-		embedding = np.delete(embedding, np.s_[max_length - 1:-1], 0)
-		embeddings_p.append(embedding.tolist())
-	return embeddings_p

@@ -131,8 +131,8 @@ class BertModel(object):
   def __init__(self,
                config,
                is_training,
-               input_ids,
-               input_mask=None,
+               #input_ids,
+               #input_mask=None,
                token_type_ids=None,
                use_one_hot_embeddings=False,
                scope=None):
@@ -154,16 +154,20 @@ class BertModel(object):
         is invalid.
     """
     config = copy.deepcopy(config)
+    gpu_options = tf.GPUOptions(allow_growth=True)
+    self.sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
     if not is_training:
       config.hidden_dropout_prob = 0.0
       config.attention_probs_dropout_prob = 0.0
 
-    input_shape = get_shape_list(input_ids, expected_rank=2)
+    self.input_ids = tf.placeholder(tf.int32, [None, None])
+    self.input_mask = tf.placeholder(tf.int32, [None, None])
+    input_shape = get_shape_list(self.input_ids, expected_rank=2)
     batch_size = input_shape[0]
     seq_length = input_shape[1]
 
-    if input_mask is None:
-      input_mask = tf.ones(shape=[batch_size, seq_length], dtype=tf.int32)
+    if self.input_mask is None:
+      self.input_mask = tf.ones(shape=[batch_size, seq_length], dtype=tf.int32)
 
     if token_type_ids is None:
       token_type_ids = tf.zeros(shape=[batch_size, seq_length], dtype=tf.int32)
@@ -172,7 +176,7 @@ class BertModel(object):
       with tf.variable_scope("embeddings"):
         # Perform embedding lookup on the word ids.
         (self.embedding_output, self.embedding_table) = embedding_lookup(
-            input_ids=input_ids,
+            input_ids=self.input_ids,
             vocab_size=config.vocab_size,
             embedding_size=config.hidden_size,
             initializer_range=config.initializer_range,
@@ -198,7 +202,7 @@ class BertModel(object):
         # mask of shape [batch_size, seq_length, seq_length] which is used
         # for the attention scores.
         attention_mask = create_attention_mask_from_input_mask(
-            input_ids, input_mask)
+            self.input_ids, self.input_mask)
 
         # Run the stacked transformer.
         # `sequence_output` shape = [batch_size, seq_length, hidden_size].
@@ -230,18 +234,30 @@ class BertModel(object):
             config.hidden_size,
             activation=tf.tanh,
             kernel_initializer=create_initializer(config.initializer_range))
+        self.saver = tf.train.Saver()
+
+  def restore(self, path):
+    """
+    Restores the model into model_dir from model_prefix as the model indicator
+    """
+
+    self.saver.restore(self.sess, path)
 
   def get_pooled_output(self):
     return self.pooled_output
 
-  def get_sequence_output(self):
+  def get_sequence_output(self, batch):
     """Gets final hidden layer of encoder.
 
     Returns:
       float Tensor of shape [batch_size, seq_length, hidden_size] corresponding
       to the final hidden of the transformer encoder.
     """
-    return self.sequence_output
+    feed_dict = {self.input_ids: np.array([feature.input_ids for feature in batch]),
+                    self.input_mask: np.array([feature.input_mask for feature in batch])}
+
+    output = self.sess.run(self.sequence_output, feed_dict)
+    return output
 
   def get_all_encoder_layers(self):
     return self.all_encoder_layers

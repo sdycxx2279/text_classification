@@ -8,13 +8,12 @@ class BaseModel(object):
 	"""Generic class for general methods"""
 
 	def __init__(self, config):
-		"""Defines self.config and self.logger
+		"""Defines self.config
 		Args:
 			config: (Config instance) class with hyper parameters,
 				vocab and embeddings
 		"""
 		self.config = config
-		self.logger = config.logger
 		self.sess = None
 		self.saver = None
 
