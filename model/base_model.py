@@ -1,6 +1,8 @@
 import os
 import tensorflow as tf
 
+from .utils import get_data_batch
+
 import logging
 logging.basicConfig(level = logging.INFO,format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
@@ -48,20 +50,25 @@ class BaseModel(object):
 		self.saver = tf.train.Saver()
 		self.sess.run(init)
 
-	def fit(self, check_num, dropout_prob, data_batch, dev_batch, output_model):
+	def restore(self, sess, model_path):
+		self.sess = sess
+		self.saver.restore(self.sess, model_path)
+
+	def fit(self, check_num, dropout_prob, train_path, dev_path, output_model):
 		best_score = 0.
 		not_check_num = 0
 		for epoch in range(self.config.n_epochs):
 			logging.info("Epoch %d out of %d", epoch + 1, self.config.n_epochs)
-			for index, batch_x, batch_y in data_batch:
+			for index, batch_x, batch_y in get_data_batch(train_path, self.config.batch_size):
 				loss = self.train_on_batch(batch_x, batch_y, dropout_prob)
 				#logging.info("Loss:{}".format(loss))
 				if index % check_num == 0:
 					logging.info('The loss is {}'.format(loss))
 					self.board_on_batch(batch_x, batch_y, index, dropout_prob)
 					not_check_num += 1
-					score = self.run_evaluate(dev_batch)
+					acc, score = self.run_evaluate(get_data_batch(dev_path, self.config.batch_size))
 					logging.info('The score of evaluate is {}'.format(score))
+					logging.info('The accuracy of evaluate is {}'.format(acc))
 					if score > best_score:
 						best_score = score
 						not_check_num = 0
@@ -73,4 +80,6 @@ class BaseModel(object):
 							logging.info("The model has not improve at {} batches, training is over.".format(check_num))
 							break
 
-				logging.info("The best score of model is {} in Epoch {}".format(best_score, epoch + 1))
+			logging.info("The best score of model is {} in Epoch {}".format(best_score, epoch + 1))
+
+		logging.info('-----Done-----')

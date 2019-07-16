@@ -19,6 +19,7 @@ class Config(object):
         self.dropout = 0.5
         self.hidden_size = 300
         self.n_epochs = 10
+        self.batch_size = 64
         self.filter_sizes = [3, 4, 5]
         self.filter_nums = 2
         #self.max_grad_norm = 10.
@@ -43,6 +44,7 @@ class textCNN(BaseModel):
 
         self.config.max_length = max_len
         self.config.n_epochs = n_epochs
+        self.config.batch_size = batch_size
         if n_classes != None:
             self.config.n_classes = n_classes
         self.build()
@@ -114,7 +116,7 @@ class textCNN(BaseModel):
         self.dropout_placeholder = tf.placeholder(tf.float32)
 
     def create_feed_dict(self, inputs_batch, labels_batch=None,  dropout_prob=1.):
-        sequence_lengths = [len(x) for x in inputs_batch]
+        #sequence_lengths = [len(x) for x in inputs_batch]
         bert_embeddings = self.encode_bert(inputs_batch)
 
         # embeddings_padded = process_bert_embeddings(bert_embeddings, sequence_lengths, self.config.max_length)
@@ -174,7 +176,6 @@ class textCNN(BaseModel):
     def add_loss_op(self):
         with tf.variable_scope('loss'):
             loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits = self.logits, labels = self.label_placeholder), name= 'loss')
-            tf.summary.scalar("loss", loss)
             return loss
 
     def add_accuracy_op(self):
@@ -213,8 +214,8 @@ class textCNN(BaseModel):
 
     def eveluate_on_batch(self, inputs_batch, labels_batch):
         feed = self.create_feed_dict(inputs_batch, labels_batch)
-        metric = self.sess.run(self.metric, feed_dict = feed)
-        return metric
+        acc, metric = self.sess.run([self.acc, self.metric], feed_dict = feed)
+        return acc, metric
 
     def predict_on_batch(self, inputs_batch):
         feed = self.create_feed_dict(inputs_batch)
@@ -223,13 +224,16 @@ class textCNN(BaseModel):
 
     def run_evaluate(self, dev_batch):
         scores = 0.0
+        accs = 0.0
         iter_num = 0
         for _, x_dev, y_dev in dev_batch:
-            score = self.eveluate_on_batch(x_dev, y_dev)
+            acc, score = self.eveluate_on_batch(x_dev, y_dev)
             scores += score
+            accs += acc
             iter_num += 1
+        #logging.info('score is {}\n iter is {}'.format(scores, iter_num))
         
-        return scores / iter_num
+        return accs / (iter_num + 1e-9), scores / (iter_num + 1e-9)
 
     def build(self):
         self.add_placeholders()
@@ -237,6 +241,9 @@ class textCNN(BaseModel):
         self.logits, self.pred = self.add_prediction_op()
         self.loss = self.add_loss_op()
         self.metric = self.add_F1_op()
-        tf.summary.histogram('f1_metric', self.metric)
+        self.acc = self.add_accuracy_op()
         self.train_op = self.add_training_op()
+        tf.summary.scalar("loss", self.loss)
+        tf.summary.histogram('f1_metric', self.metric)
+        self.merged = tf.summary.merge_all()
         
